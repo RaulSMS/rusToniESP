@@ -88,6 +88,80 @@ impl TimeSource for SdCardClock {
     }
 }
 
+fn initialize_sd_card(mount_point: &str) -> Result<(), StorageError> {
+    let board_config = crate::board::config::BoardConfig::load();
+    let peripherals = esp_idf_hal::peripherals::Peripherals::take().map_err(|_| StorageError::MountFailed)?;
+
+    let spi_config = esp_idf_hal::spi::config::Config::new()
+        .baudrate(400.kHz().into())
+        .data_mode(MODE_0);
+
+    let spi = peripherals.spi2;
+
+    #[cfg(feature = "esp32s3")]
+    let (sclk, sdo, sdi, cs) = (
+        peripherals.pins.gpio8,
+        peripherals.pins.gpio11,
+        peripherals.pins.gpio18,
+        peripherals.pins.gpio10,
+    );
+
+    #[cfg(not(feature = "esp32s3"))]
+    let (sclk, sdo, sdi, cs) = (
+        peripherals.pins.gpio18,
+        peripherals.pins.gpio23,
+        peripherals.pins.gpio19,
+        peripherals.pins.gpio5,
+    );
+
+    log::info!(
+        "Initializing SD card on SPI2 using CS{} SCLK{} MOSI{} MISO{}",
+        board_config.sd_cs_pin,
+        board_config.sd_sck_pin,
+        board_config.sd_mosi_pin,
+        board_config.sd_miso_pin
+    );
+
+    log::info!("Creating SPI device");
+    let spi_device = esp_idf_hal::spi::SpiDeviceDriver::new_single(
+        spi,
+        sclk,
+        sdo,
+        Some(sdi),
+        Some(cs),
+        &esp_idf_hal::spi::SpiDriverConfig::new(),
+        &spi_config,
+    )
+    .map_err(|_| StorageError::MountFailed)?;
+
+    log::info!("SPI device ready, opening SD volume");
+    let sd_card = embedded_sdmmc::SdCard::new(spi_device, esp_idf_hal::delay::FreeRtos);
+    let volume_mgr = VolumeManager::new(sd_card, SdCardClock);
+
+    log::info!("Opening SD volume");
+    let volume = volume_mgr
+        .open_volume(VolumeIdx(0))
+        .map_err(|_| StorageError::MountFailed)?;
+
+    log::info!("Opening root directory");
+    let root_dir = volume
+        .open_root_dir()
+        .map_err(|_| StorageError::MountFailed)?;
+
+    log::info!("Opening or creating data file");
+    let mut file = root_dir
+        .open_file_in_dir("RUSTONI.TXT", Mode::ReadWriteCreateOrAppend)
+        .map_err(|_| StorageError::MountFailed)?;
+
+    log::info!("Writing data to SD card");
+    file.write_all(b"hello from rusToniESP\n")
+        .map_err(|_| StorageError::IoError)?;
+    file.flush().map_err(|_| StorageError::IoError)?;
+
+    log::info!("SD I/O completed successfully at {}", mount_point);
+    Ok(())
+}
+
 impl StorageDriver for MockStorageDriver {
     fn mount(&self) -> Result<(), StorageError> {
         let mut mounted = self.mounted.lock().unwrap();
@@ -124,76 +198,27 @@ impl StorageDriver for SpiSdCardDriver {
         if *mounted {
             return Err(StorageError::AlreadyMounted);
         }
+        drop(mounted);
 
         #[cfg(target_os = "espidf")]
         {
-            let board_config = crate::board::config::BoardConfig::load();
-            let peripherals = esp_idf_hal::peripherals::Peripherals::take()
-                .map_err(|_| StorageError::MountFailed)?;
-
-            let spi_config = esp_idf_hal::spi::config::Config::new()
-                .baudrate(400.kHz().into())
-                .data_mode(MODE_0);
-
-            let spi = peripherals.spi2;
-
-            #[cfg(feature = "esp32s3")]
-            let (sclk, sdo, sdi, cs) = (
-                peripherals.pins.gpio8,
-                peripherals.pins.gpio11,
-                peripherals.pins.gpio18,
-                peripherals.pins.gpio10,
-            );
-
-            #[cfg(not(feature = "esp32s3"))]
-            let (sclk, sdo, sdi, cs) = (
-                peripherals.pins.gpio18,
-                peripherals.pins.gpio23,
-                peripherals.pins.gpio19,
-                peripherals.pins.gpio5,
-            );
-
-            log::info!(
-                "Initializing SD card on SPI2 using CS{} SCLK{} MOSI{} MISO{}",
-                board_config.sd_cs_pin,
-                board_config.sd_sck_pin,
-                board_config.sd_mosi_pin,
-                board_config.sd_miso_pin
-            );
-
-            let spi_device = esp_idf_hal::spi::SpiDeviceDriver::new_single(
-                spi,
-                sclk,
-                sdo,
-                Some(sdi),
-                Some(cs),
-                &esp_idf_hal::spi::SpiDriverConfig::new(),
-                &spi_config,
-            )
-            .map_err(|_| StorageError::MountFailed)?;
-
-            let sd_card = embedded_sdmmc::SdCard::new(spi_device, esp_idf_hal::delay::Ets);
-            let volume_mgr = VolumeManager::new(sd_card, SdCardClock);
-            let volume = volume_mgr
-                .open_volume(VolumeIdx(0))
-                .map_err(|_| StorageError::MountFailed)?;
-            let root_dir = volume
-                .open_root_dir()
-                .map_err(|_| StorageError::MountFailed)?;
-            let mut file = root_dir
-                .open_file_in_dir("RUSTONI.TXT", Mode::ReadWriteCreateOrAppend)
-                .map_err(|_| StorageError::MountFailed)?;
-            file.write_all(b"hello from rusToniESP\n")
-                .map_err(|_| StorageError::IoError)?;
-            file.flush().map_err(|_| StorageError::IoError)?;
+            let mount_point = self.mount_point.clone();
+            std::thread::spawn(move || {
+                log::info!("Starting SD card initialization in background");
+                match initialize_sd_card(&mount_point) {
+                    Ok(()) => log::info!("SD card initialization completed"),
+                    Err(err) => log::error!("SD card initialization failed: {}", err),
+                }
+            });
         }
 
         #[cfg(not(target_os = "espidf"))]
         {
             std::fs::create_dir_all(&self.mount_point).map_err(|_| StorageError::MountFailed)?;
+            let mut mounted = self.mounted.lock().unwrap();
+            *mounted = true;
         }
 
-        *mounted = true;
         Ok(())
     }
 
