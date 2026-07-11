@@ -17,9 +17,18 @@ opt-level = "s"
 debug = true    # Symbols are nice, and they don't increase the size on Flash
 opt-level = "z"
 
+[features]
+default = []
+esp32 = []
+esp32s3 = []
+
 [dependencies]
 log = "0.4"
 esp-idf-svc = { version = "0.52.1", features = ["critical-section", "embassy-time-driver", "embassy-sync"] }
+esp-idf-hal = "0.46.2"
+embedded-sdmmc = "0.9.0"
+embedded-hal = "1.0"
+embedded-io = "0.6.1"
 # Remove `generic-queue-8` if you plan to use `embassy-time` WITH `embassy-executor`
 embassy-time = { version = "0.5", features = ["generic-queue-8"] }
 
