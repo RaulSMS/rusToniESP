@@ -1,0 +1,100 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "**/README.md"
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  rust-checks:
+    name: Rust Checks
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        action:
+          - command: build
+            args: --release
+          - command: fmt
+            args: --all -- --check --color always
+          - command: clippy
+            args: --all-targets --all-features --workspace -- -D warnings
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Rust
+        uses: esp-rs/xtensa-toolchain@v1.6
+        with:
+          default: true
+          buildtargets: esp32s3
+          ldproxy: true
+      - name: Enable caching
+        uses: Swatinem/rust-cache@v2
+      - name: Run command
+        run: cargo ${{ matrix.action.command }} ${{ matrix.action.args }}
+
+  unit-tests:
+    name: Unit Tests (host)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      # Unit tests for pure-logic modules (core/, audio/playlist, rfid/config_mapping, etc.)
+      # are compiled and run on the host using the standard Rust toolchain.
+      # Hardware-peripheral code is excluded via #[cfg(test)] guards or mock trait impls.
+      - name: Setup stable Rust (host target)
+        uses: dtolnay/rust-toolchain@stable
+      - name: Enable caching
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: unit-tests
+      - name: Run unit tests
+        run: cargo test --lib --workspace
+        env:
+          # Prevent esp-idf-sys from trying to compile the native ESP-IDF during host tests
+          CARGO_CFG_UNIX: "1"
+
+  # --------------------------------------------------------------------
+  # Wokwi simulation tests (integration / serial output assertions)
+  # Requires a Wokwi CI token stored as WOKWI_CLI_TOKEN in repo secrets.
+  # Uncomment and configure when the first integration scenario is ready.
+  # --------------------------------------------------------------------
+  # wokwi-sim:
+  #   name: Wokwi Simulation Tests
+  #   runs-on: ubuntu-latest
+  #   needs: rust-checks
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: esp-rs/xtensa-toolchain@v1.6
+  #       with:
+  #         default: true
+  #         buildtargets: esp32s3
+  #         ldproxy: true
+  #     - uses: Swatinem/rust-cache@v2
+  #     - name: Build debug ELF
+  #       run: cargo build
+  #     - name: Install wokwi-cli
+  #       run: curl -L https://wokwi.com/ci/install.sh | sh
+  #     - name: Run simulation scenarios
+  #       env:
+  #         WOKWI_CLI_TOKEN: ${{ secrets.WOKWI_CLI_TOKEN }}
+  #       run: |
+  #         wokwi-cli \
+  #           --elf target/xtensa-esp32s3-espidf/debug/rus-toni-esp.elf \
+  #           --timeout 60000 \
+  #           --serial-log-file sim.log \
+  #           .
+  #     - name: Upload simulation log
+  #       if: always()
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: sim-log
+  #         path: sim.log
