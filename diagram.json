@@ -11,6 +11,13 @@
             "attrs": {
                 "flashSize": "16"
             }
+        },
+        {
+            "type": "wokwi-microsd-card",
+            "id": "sd1",
+            "top": 0.0,
+            "left": 12.0,
+            "attrs": {}
         }
     ],
     "connections": [
@@ -25,6 +32,42 @@
             "$serialMonitor:TX",
             "",
             []
+        ],
+        [
+            "esp:GND.1",
+            "sd1:GND",
+            "black",
+            ["v0"]
+        ],
+        [
+            "esp:3V3.1",
+            "sd1:VCC",
+            "red",
+            ["v0"]
+        ],
+        [
+            "esp:10",
+            "sd1:CS",
+            "yellow",
+            ["v0"]
+        ],
+        [
+            "esp:11",
+            "sd1:DI",
+            "blue",
+            ["v0"]
+        ],
+        [
+            "esp:18",
+            "sd1:DO",
+            "green",
+            ["v0"]
+        ],
+        [
+            "esp:8",
+            "sd1:SCK",
+            "orange",
+            ["v0"]
         ]
     ],
     "serialMonitor": {

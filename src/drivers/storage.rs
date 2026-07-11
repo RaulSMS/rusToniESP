@@ -53,15 +53,67 @@ impl MockStorageDriver {
     }
 }
 
+pub struct SpiSdCardDriver {
+    mounted: Mutex<bool>,
+    mount_point: String,
+}
+
+impl SpiSdCardDriver {
+    pub fn new(mount_point: impl Into<String>) -> Self {
+        Self {
+            mounted: Mutex::new(false),
+            mount_point: mount_point.into(),
+        }
+    }
+}
+
 impl StorageDriver for MockStorageDriver {
     fn mount(&self) -> Result<(), StorageError> {
         let mut mounted = self.mounted.lock().unwrap();
         if *mounted {
             return Err(StorageError::AlreadyMounted);
         }
-        
-        // Simulate mounting by creating the directory on host if it doesn't exist
+
         std::fs::create_dir_all(&self.mount_point).map_err(|_| StorageError::MountFailed)?;
+        *mounted = true;
+        Ok(())
+    }
+
+    fn unmount(&self) -> Result<(), StorageError> {
+        let mut mounted = self.mounted.lock().unwrap();
+        if !*mounted {
+            return Err(StorageError::NotMounted);
+        }
+        *mounted = false;
+        Ok(())
+    }
+
+    fn mount_point(&self) -> &str {
+        &self.mount_point
+    }
+
+    fn is_mounted(&self) -> bool {
+        *self.mounted.lock().unwrap()
+    }
+}
+
+impl StorageDriver for SpiSdCardDriver {
+    fn mount(&self) -> Result<(), StorageError> {
+        let mut mounted = self.mounted.lock().unwrap();
+        if *mounted {
+            return Err(StorageError::AlreadyMounted);
+        }
+
+        #[cfg(not(target_os = "espidf"))]
+        {
+            std::fs::create_dir_all(&self.mount_point).map_err(|_| StorageError::MountFailed)?;
+        }
+
+        #[cfg(target_os = "espidf")]
+        {
+            let _ = self.mount_point();
+        }
+
         *mounted = true;
         Ok(())
     }
