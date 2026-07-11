@@ -7,4 +7,8 @@ fn main() {
     esp_idf_svc::log::EspLogger::initialize_default();
 
     log::info!("Hello, world!");
+
+    // Initialize application wiring and startup
+    rus_toni_esp::app::init();
 }
+
