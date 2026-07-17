@@ -7,6 +7,7 @@ use esp_idf_svc::io::EspIOError;
 use std::sync::{Arc, Mutex};
 
 static INDEX_TEMPLATE: &str = include_str!("web_assets/index.html");
+static ADVANCED_TEMPLATE: &str = include_str!("web_assets/advanced.html");
 
 pub struct WebServerContext {
     _server: EspHttpServer<'static>,
@@ -21,18 +22,25 @@ impl WebServerContext {
         let config = Configuration::default();
         let mut server = EspHttpServer::new(&config)?;
 
-        // 1. GET Root Dashboard UI
-        let led_root = shared_led.clone();
+        // 1. GET Root Dashboard UI Layout
         server.fn_handler("/", esp_idf_svc::http::Method::Get, move |request| -> Result<(), EspIOError> {
+            let mut response = request.into_ok_response()?;
+            response.write(INDEX_TEMPLATE.as_bytes())?;
+            Ok(())
+        })?;
+
+        // 2. GET Advanced Functional Diagnostic Tools Panel
+        let led_advanced = shared_led.clone();
+        server.fn_handler("/advanced", esp_idf_svc::http::Method::Get, move |request| -> Result<(), EspIOError> {
             let is_high = {
-                let led_lock = led_root.lock().unwrap();
+                let led_lock = led_advanced.lock().unwrap();
                 led_lock.is_set_high()
             };
 
             let status_text = if is_high { "ON" } else { "OFF" };
             let btn_color = if is_high { "#ef4444" } else { "#22c55e" };
 
-            let html = INDEX_TEMPLATE
+            let html = ADVANCED_TEMPLATE
                 .replace("{0}", btn_color)
                 .replace("{1}", status_text);
 
@@ -41,7 +49,7 @@ impl WebServerContext {
             Ok(())
         })?;
 
-        // 2. POST Toggle Onboard LED
+        // 3. POST Toggle Onboard LED (Redirects back to Advanced Tools view)
         let led_toggle = shared_led.clone();
         server.fn_handler("/toggle", esp_idf_svc::http::Method::Post, move |request| -> Result<(), EspIOError> {
             {
@@ -52,30 +60,30 @@ impl WebServerContext {
                     led_lock.set_high().unwrap();
                 }
             }
-            let mut response = request.into_response(303, Some("See Other"), &[("Location", "/")])?;
+            let mut response = request.into_response(303, Some("See Other"), &[("Location", "/advanced")])?;
             response.write(&[])?;
             Ok(())
         })?;
 
-        // 3. GET Interactive File Explorer
+        // 4. GET Interactive File Explorer (Streaming execution layout)
         server.fn_handler("/files", esp_idf_svc::http::Method::Get, move |mut request| -> Result<(), EspIOError> {
             handlers::handle_get_files(request.connection()).map_err(|e| EspIOError::from(e))?;
             Ok(())
         })?;
 
-        // 4. GET Download Endpoint
+        // 5. GET Download Endpoint
         server.fn_handler("/download", esp_idf_svc::http::Method::Get, move |mut request| -> Result<(), EspIOError> {
             handlers::handle_download(request.connection()).map_err(|e| EspIOError::from(e))?;
             Ok(())
         })?;
 
-        // 5. POST Multi-chunk File Upload
+        // 6. POST Multi-chunk File Upload
         server.fn_handler("/upload", esp_idf_svc::http::Method::Post, move |mut request| -> Result<(), EspIOError> {
             handlers::handle_upload(request.connection()).map_err(|e| EspIOError::from(e))?;
             Ok(())
         })?;
 
-        // 6. DELETE Storage Asset Endpoint
+        // 7. DELETE Storage Asset Endpoint
         server.fn_handler("/delete", esp_idf_svc::http::Method::Delete, move |mut request| -> Result<(), EspIOError> {
             handlers::handle_delete(request.connection()).map_err(|e| EspIOError::from(e))?;
             Ok(())

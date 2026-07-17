@@ -2,18 +2,16 @@ use esp_idf_hal::peripherals::Peripherals;
 use esp_idf_svc::eventloop::EspSystemEventLoop;
 use esp_idf_svc::nvs::EspDefaultNvsPartition;
 use esp_idf_svc::wifi::{AccessPointConfiguration, AuthMethod, Configuration, EspWifi, Protocol};
-use std::fs::File; // Required for SD card test
-use std::io::Write; // Required for SD card test
-use std::path::Path; // Required for SD card test
+use std::path::Path;
 
 use enumset::enum_set;
 use heapless::String;
 
 use rus_toni_esp::board::config::{self, BoardConfig};
 use rus_toni_esp::drivers::storage;
-use rus_toni_esp::services::storage_service; // Required for SD card check
+use rus_toni_esp::services::storage_service;
 use rus_toni_esp::services::web_service::WebServerContext;
-use rus_toni_esp::util; // Required for memory summary
+use rus_toni_esp::util;
 
 static BOARD: BoardConfig = BoardConfig::load();
 
@@ -25,23 +23,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut peripherals = Peripherals::take()?;
 
-    // 1. Initialize and Mount SD Card (Kept for verification)
+    // 1. Initialize and Mount SD Card Driver Stack
     let _mounted_fatfs = storage::init_sd_card(&mut peripherals, &BOARD)?;
 
-    let file_path = format!("{}/RUST_LOG.TXT", config::MOUNT_PATH);
-    if let Ok(mut file) = File::create(&file_path) {
-        let _ = file.write_all(b"SD Card Verify: OK\n");
+    // 2. Execute the isolated read/write/delete testing workflow
+    if let Err(e) = util::run_sd_card_init_test(config::MOUNT_PATH) {
+        log::error!("❌ Transient SD Card initialization verification failed: {:?}", e);
     }
 
-    if let Err(e) = storage_service::generate_nested_test_files(config::MOUNT_PATH) {
-        log::error!("❌ SD Card test files failed: {:?}", e);
-    }
+    // List the remaining directory state (Should show only your persistent files)
     storage_service::list_dir(Path::new(config::MOUNT_PATH), 0);
 
-    // 2. Fetch LED pin
+    // 3. Fetch LED pin
     let led_pin = BOARD.get_any_pin(2, &mut peripherals)?;
 
-    // 3. Network Stack
+    // 4. Network Stack Setup
     let nvs = EspDefaultNvsPartition::take()?;
     let sys_loop = EspSystemEventLoop::take()?;
     let mut wifi = EspWifi::new(peripherals.modem, sys_loop.clone(), Some(nvs))?;
@@ -63,7 +59,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     wifi.set_configuration(&Configuration::AccessPoint(ap_config))?;
     wifi.start()?;
 
-    // 4. Web Server
+    // 5. Run Web Server Services
     let _web_server = WebServerContext::init(led_pin)?;
 
     loop {

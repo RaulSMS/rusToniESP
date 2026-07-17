@@ -8,34 +8,14 @@ use super::utils::{extract_query_param, sanitize_fat_filename};
 
 static FILES_TEMPLATE: &str = include_str!("../web_assets/files.html");
 
-/// Helper to safely convert an optional OS error code into a concrete EspError
+/// FIXME: without this it does nto compile but there must be a better way.
+/// Helper to safely convert an optional OS error code into a concrete EspError 
 fn map_io_err(e: std::io::Error) -> EspError {
     let code = e.raw_os_error().unwrap_or(-1);
     let non_zero_code = core::num::NonZeroI32::new(if code == 0 { -1 } else { code }).unwrap();
     EspError::from_non_zero(non_zero_code)
 }
 
-/// Recursively deletes a directory structure from the bottom up.
-/// Necessary for ESP-IDF FAT VFS because a directory block cannot be unlinked
-/// if it contains any files or child directories.
-fn native_recursive_delete<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
-    let path = path.as_ref();
-    if path.is_dir() {
-        for entry in fs::read_dir(path)? {
-            let entry = entry?;
-            let child_path = entry.path();
-            if child_path.is_dir() {
-                native_recursive_delete(&child_path)?;
-            } else {
-                fs::remove_file(&child_path)?;
-            }
-        }
-        fs::remove_dir(path)?;
-    } else {
-        fs::remove_file(path)?;
-    }
-    Ok(())
-}
 
 pub fn handle_get_files(connection: &mut EspHttpConnection) -> Result<(), EspError> {
     let uri = connection.uri();
@@ -224,7 +204,9 @@ pub fn handle_delete(connection: &mut EspHttpConnection) -> Result<(), EspError>
     }
 
     log::info!("🗑️ Executing deep recursive deletion on: {}", target_to_delete);
-    match native_recursive_delete(path_obj) {
+    
+    // Reusing the centralized utility function from crate::util
+    match crate::util::native_recursive_delete(path_obj) {
         Ok(_) => {
             log::info!("✅ Successfully pruned targeted asset node.");
             connection.initiate_response(200, Some("OK"), &[])?;

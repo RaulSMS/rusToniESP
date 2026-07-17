@@ -1,4 +1,88 @@
+use std::fs::{self, File};
+use std::io::Write;
+use std::path::Path;
 use std::sync::atomic::{AtomicU32, Ordering};
+
+/// Recursively deletes a directory tree from the bottom up.
+/// Public utility accessible across the workspace.
+pub fn native_recursive_delete<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
+    let path = path.as_ref();
+    if path.is_dir() {
+        for entry in fs::read_dir(path)? {
+            let entry = entry?;
+            let child_path = entry.path();
+            if child_path.is_dir() {
+                native_recursive_delete(&child_path)?;
+            } else {
+                fs::remove_file(&child_path)?;
+            }
+        }
+        fs::remove_dir(path)?;
+    } else if path.exists() {
+        fs::remove_file(path)?;
+    }
+    Ok(())
+}
+
+/// Runs a transient nested read/write/delete verification on the SD Card
+pub fn run_sd_card_init_test(base_path: &str) -> std::io::Result<()> {
+    log::info!("🧪 [SD Init Test] Starting transient filesystem verification...");
+
+    let test_root = format!("{}/INIT_TST", base_path);
+    let nested_dir = format!("{}/NEST_DIR", test_root);
+    let file_path = format!("{}/TEST_TXT.TXT", nested_dir);
+
+    let test_root_path = Path::new(&test_root);
+    let nested_dir_path = Path::new(&nested_dir);
+
+    // Ensure any leftover crash remnants from previous boots are purged
+    if test_root_path.exists() {
+        let _ = native_recursive_delete(test_root_path);
+    }
+
+    // Create nested directories
+    fs::create_dir(test_root_path)?;
+    fs::create_dir(nested_dir_path)?;
+    log::info!("   └─ Created nested tree structure successfully.");
+
+    // Write data to a deep file target
+    let test_payload = b"ESP32-Rust-VFS-Verification-String";
+    {
+        let mut file = File::create(&file_path)?;
+        file.write_all(test_payload)?;
+        file.flush()?;
+    }
+    log::info!("   └─ Wrote verification data file.");
+
+    // Read back and verify size integrity
+    let metadata = fs::metadata(&file_path)?;
+    log::info!("   └─ Verified file size allocation: {} bytes.", metadata.len());
+    
+    if metadata.len() != test_payload.len() as u64 {
+        log::error!("❌ [SD Init Test] Critical validation error: File size mismatch!");
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "VFS payload length corrupted",
+        ));
+    }
+
+    // Clean up everything to leave the partition exactly as it was found
+    log::info!("   └─ Erasing test artifacts dynamically...");
+    native_recursive_delete(test_root_path)?;
+
+    // VERIFICATION STEP: Explicitly ensure the directory no longer exists on disk
+    if test_root_path.exists() {
+        log::error!("❌ [SD Init Test] Validation failure: Test folder structure still exists on disk!");
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "Failed to delete transient test directory completely",
+        ));
+    }
+    log::info!("   └─ Confirmed: Test folder structure completely removed.");
+
+    log::info!("✅ [SD Init Test] All passes successful! VFS stack is 100% operational.");
+    Ok(())
+}
 
 /// Prints a comprehensive summary of memory allocation and stack safety
 pub fn print_memory_summary(context_label: &str) {

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>rusToniESP - Advanced Tools</title>
+    <style>
+        :root {
+            --bg: #121214; --surface: #1a1a1e; --border: #2a2a32;
+            --text: #e1e1e6; --muted: #a8a8b3; --primary: #4ade80;
+        }
+        @media (prefers-color-scheme: light) {
+            :root {
+                --bg: #f4f4f5; --surface: #ffffff; --border: #e4e4e7;
+                --text: #18181b; --muted: #71717a; --primary: #16a34a;
+            }
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); padding: 2rem 1rem; }
+        .container { max-width: 600px; margin: 0 auto; background: var(--surface); border: 1px solid var(--border); padding: 1.5rem; border-radius: 8px; }
+        h1 { font-size: 1.3rem; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; }
+        .control-box { background: var(--bg); border: 1px solid var(--border); padding: 1rem; border-radius: 6px; margin-top: 1rem; display: flex; justify-content: space-between; align-items: center;}
+        .btn { padding: 0.5rem 1rem; background-color: {0}; border: none; border-radius: 4px; font-weight: 600; color: white; cursor: pointer; text-decoration: none; font-size: 0.85rem;}
+        .back-dashboard { font-size: 0.85rem; color: var(--primary); text-decoration: none; }
+        .back-dashboard:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⚙ Hardware Maintenance <a href="/" class="back-dashboard">← Dashboard</a></h1>
+        <p style="color: var(--muted); font-size: 0.9rem;">Perform manual developmental diagnostic verifications safely.</p>
+        
+        <div class="control-box">
+            <div>
+                <p style="font-weight: 500;">Onboard Indicator Status: <span style="color: {0}; font-weight: bold;">{1}</span></p>
+                <p style="font-size: 0.8rem; color: var(--muted);">Toggles development GPIO state targets.</p>
+            </div>
+            <form action="/toggle" method="POST" style="margin: 0;">
+                <button type="submit" class="btn">Toggle LED</button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
