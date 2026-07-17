@@ -1,8 +1,14 @@
-# Board configuration
+# Board Configuration
 
-Select the target board with an environment variable:
+The target board profile is determined **strictly by your active compilation target**. There is no need to pass manual environment variables during execution.
 
-- ESP32-S3: `RUSTONI_BOARD=esp32s3 cargo build`
-- ESP32-WROOM: `RUSTONI_BOARD=esp32 cargo build`
+To select or switch the board layout, edit the master switchboard at the top of your `.cargo/config.toml` file:
 
-Board definitions live in `config/boards/`.
+* **ESP32-S3:** Set `target = "xtensa-esp32s3-espidf"`
+* **ESP32 (WROOM/WROVER):** Set `target = "xtensa-esp32-espidf"`
+
+### Project Build Command
+Once the target is uncommented in `.cargo/config.toml`, simply run:
+
+```bash
+cargo build

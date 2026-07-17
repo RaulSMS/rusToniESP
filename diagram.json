@@ -1,77 +1,58 @@
 {
-    "version": 1,
-    "editor": "wokwi",
-    "author": "RaulSMS <raulampu@gmail.com>",
-    "parts": [
-        {
-            "type": "board-esp32-s3-devkitc-1",
-            "id": "esp",
-            "top": 0.59,
-            "left": 0.67,
-            "attrs": {
-                "flashSize": "16"
-            }
-        },
-        {
-            "type": "wokwi-microsd-card",
-            "id": "sd1",
-            "top": 0.0,
-            "left": 12.0,
-            "attrs": {}
-        }
-    ],
-    "connections": [
-        [
-            "esp:TX",
-            "$serialMonitor:RX",
-            "",
-            []
-        ],
-        [
-            "esp:RX",
-            "$serialMonitor:TX",
-            "",
-            []
-        ],
-        [
-            "esp:GND.1",
-            "sd1:GND",
-            "black",
-            ["v0"]
-        ],
-        [
-            "esp:3V3.1",
-            "sd1:VCC",
-            "red",
-            ["v0"]
-        ],
-        [
-            "esp:10",
-            "sd1:CS",
-            "yellow",
-            ["v0"]
-        ],
-        [
-            "esp:11",
-            "sd1:DI",
-            "blue",
-            ["v0"]
-        ],
-        [
-            "esp:18",
-            "sd1:DO",
-            "green",
-            ["v0"]
-        ],
-        [
-            "esp:8",
-            "sd1:SCK",
-            "orange",
-            ["v0"]
-        ]
-    ],
-    "serialMonitor": {
-        "display": "terminal",
-        "convertEol": true
+  "version": 1,
+  "editor": "wokwi",
+  "author": "RaulSMS <raulampu@gmail.com>",
+  "parts": [
+    {
+      "type": "board-esp32-devkit-c-v4",
+      "id": "esp",
+      "top": 0.59,
+      "left": 0.67,
+      "attrs": {
+        "flashSize": "16"
+      }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led1",
+      "top": -80,
+      "left": 150,
+      "attrs": {
+        "color": "red"
+      }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r1",
+      "top": -40,
+      "left": 150,
+      "attrs": {
+        "value": "220"
+      }
+    },
+    {
+      "type": "wokwi-microsd-card",
+      "id": "sd1",
+      "top": -150,
+      "left": -50,
+      "attrs": {}
     }
+  ],
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
+    [ "esp:2", "led1:A", "red", [ "v0" ] ],
+    [ "led1:C", "r1:1", "black", [ "v0" ] ],
+    [ "r1:2", "esp:GND.1", "black", [ "v0" ] ],
+    [ "esp:GND.2", "sd1:GND", "black", [ "v0" ] ],
+    [ "esp:3V3", "sd1:VCC", "red", [ "v0" ] ],
+    [ "esp:18", "sd1:SCK", "orange", [ "v0" ] ],
+    [ "esp:23", "sd1:DI", "blue", [ "v0" ] ],   
+    [ "esp:19", "sd1:DO", "green", [ "v0" ] ],  
+    [ "esp:5", "sd1:CS", "purple", [ "v0" ] ] 
+  ],
+  "serialMonitor": {
+    "display": "terminal",
+    "convertEol": true
+  }
 }
