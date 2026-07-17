@@ -1,242 +1,51 @@
-use std::fmt;
-use std::sync::Mutex;
+use esp_idf_hal::gpio::AnyInputPin;
+use esp_idf_hal::peripherals::Peripherals;
+use esp_idf_hal::sd::spi::SdSpiHostDriver;
+use esp_idf_hal::sd::{SdCardConfiguration, SdCardDriver};
+use esp_idf_hal::spi::{Dma, SpiDriver, SpiDriverConfig};
+use esp_idf_svc::fs::fatfs::Fatfs;
+use esp_idf_svc::io::vfs::MountedFatfs;
+use crate::board::config;
 
-use embedded_hal::spi::MODE_0;
-use embedded_sdmmc::{Mode, TimeSource, Timestamp, VolumeIdx, VolumeManager};
-use embedded_io::Write;
-use esp_idf_hal::units::FromValueType;
+pub fn init_sd_card(
+    peripherals: Peripherals,
+) -> Result<
+    MountedFatfs<Fatfs<SdCardDriver<SdSpiHostDriver<'static, SpiDriver<'static>>>>>, 
+    Box<dyn std::error::Error>
+> {
+    log::info!("[Debug] Initializing SPI2 host (SCLK: 18, MOSI: 23, MISO: 19)...");
+    
+    let spi_config = SpiDriverConfig::new().dma(Dma::Auto(4096));
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum StorageError {
-    MountFailed,
-    UnmountFailed,
-    NotMounted,
-    AlreadyMounted,
-    IoError,
-    FilesystemNotAvailable,
-}
-
-impl fmt::Display for StorageError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            StorageError::MountFailed => write!(f, "Failed to mount storage"),
-            StorageError::UnmountFailed => write!(f, "Failed to unmount storage"),
-            StorageError::NotMounted => write!(f, "Storage is not mounted"),
-            StorageError::AlreadyMounted => write!(f, "Storage is already mounted"),
-            StorageError::IoError => write!(f, "I/O error occurred on storage"),
-            StorageError::FilesystemNotAvailable => write!(f, "SD filesystem is not available"),
-        }
-    }
-}
-
-impl std::error::Error for StorageError {}
-
-pub trait StorageDriver {
-    /// Mounts the SD Card filesystem.
-    fn mount(&self) -> Result<(), StorageError>;
-
-    /// Unmounts the PDF/SD Card filesystem.
-    fn unmount(&self) -> Result<(), StorageError>;
-
-    /// Returns the mount point path (e.g. "/sdcard").
-    fn mount_point(&self) -> &str;
-
-    /// Checks if the storage media is mounted.
-    fn is_mounted(&self) -> bool;
-}
-
-pub struct MockStorageDriver {
-    mounted: Mutex<bool>,
-    mount_point: String,
-}
-
-impl MockStorageDriver {
-    pub fn new(mount_point: impl Into<String>) -> Self {
-        Self {
-            mounted: Mutex::new(false),
-            mount_point: mount_point.into(),
-        }
-    }
-}
-
-pub struct SpiSdCardDriver {
-    mounted: Mutex<bool>,
-    mount_point: String,
-}
-
-impl SpiSdCardDriver {
-    pub fn new(mount_point: impl Into<String>) -> Self {
-        Self {
-            mounted: Mutex::new(false),
-            mount_point: mount_point.into(),
-        }
-    }
-}
-
-struct SdCardClock;
-
-impl TimeSource for SdCardClock {
-    fn get_timestamp(&self) -> Timestamp {
-        Timestamp::from_calendar(2024, 1, 1, 0, 0, 0).unwrap_or(Timestamp {
-            year_since_1970: 0,
-            zero_indexed_month: 0,
-            zero_indexed_day: 0,
-            hours: 0,
-            minutes: 0,
-            seconds: 0,
-        })
-    }
-}
-
-fn initialize_sd_card(mount_point: &str) -> Result<(), StorageError> {
-    let board_config = crate::board::config::BoardConfig::load();
-    let peripherals = esp_idf_hal::peripherals::Peripherals::take().map_err(|_| StorageError::MountFailed)?;
-
-    let spi_config = esp_idf_hal::spi::config::Config::new()
-        .baudrate(400.kHz().into())
-        .data_mode(MODE_0);
-
-    let spi = peripherals.spi2;
-
-    #[cfg(feature = "esp32s3")]
-    let (sclk, sdo, sdi, cs) = (
-        peripherals.pins.gpio8,
-        peripherals.pins.gpio11,
-        peripherals.pins.gpio18,
-        peripherals.pins.gpio10,
-    );
-
-    #[cfg(not(feature = "esp32s3"))]
-    let (sclk, sdo, sdi, cs) = (
+    let spi_driver = SpiDriver::new(
+        peripherals.spi2,
         peripherals.pins.gpio18,
         peripherals.pins.gpio23,
-        peripherals.pins.gpio19,
-        peripherals.pins.gpio5,
-    );
-
-    log::info!(
-        "Initializing SD card on SPI2 using CS{} SCLK{} MOSI{} MISO{}",
-        board_config.sd_cs_pin,
-        board_config.sd_sck_pin,
-        board_config.sd_mosi_pin,
-        board_config.sd_miso_pin
-    );
-
-    log::info!("Creating SPI device");
-    let spi_device = esp_idf_hal::spi::SpiDeviceDriver::new_single(
-        spi,
-        sclk,
-        sdo,
-        Some(sdi),
-        Some(cs),
-        &esp_idf_hal::spi::SpiDriverConfig::new(),
+        Some(peripherals.pins.gpio19),
         &spi_config,
-    )
-    .map_err(|_| StorageError::MountFailed)?;
+    )?;
 
-    log::info!("SPI device ready, opening SD volume");
-    let sd_card = embedded_sdmmc::SdCard::new(spi_device, esp_idf_hal::delay::FreeRtos);
-    let volume_mgr = VolumeManager::new(sd_card, SdCardClock);
+    log::info!("[Debug] Configuring SPI SD Card Driver with CS on GPIO 5...");
+    
+    let sd_spi_host = SdSpiHostDriver::new(
+        spi_driver,
+        Some(peripherals.pins.gpio5),
+        None::<AnyInputPin>,              
+        None::<AnyInputPin>,              
+        None::<AnyInputPin>,              
+        Some(true),                        
+    )?;
 
-    log::info!("Opening SD volume");
-    let volume = volume_mgr
-        .open_volume(VolumeIdx(0))
-        .map_err(|_| StorageError::MountFailed)?;
+    let mut sd_config = SdCardConfiguration::new();
+    sd_config.speed_khz = config::SPI_SPEED_KHZ; 
 
-    log::info!("Opening root directory");
-    let root_dir = volume
-        .open_root_dir()
-        .map_err(|_| StorageError::MountFailed)?;
+    let sd_card_driver = SdCardDriver::new_spi(sd_spi_host, &sd_config)?;
 
-    log::info!("Opening or creating data file");
-    let mut file = root_dir
-        .open_file_in_dir("RUSTONI.TXT", Mode::ReadWriteCreateOrAppend)
-        .map_err(|_| StorageError::MountFailed)?;
-
-    log::info!("Writing data to SD card");
-    file.write_all(b"hello from rusToniESP\n")
-        .map_err(|_| StorageError::IoError)?;
-    file.flush().map_err(|_| StorageError::IoError)?;
-
-    log::info!("SD I/O completed successfully at {}", mount_point);
-    Ok(())
+    log::info!("👉 Attempting to mount SD Card Volume to VFS structure at '{}'...", config::MOUNT_PATH);
+    
+    let fatfs = Fatfs::new_sdcard(0, sd_card_driver)?;
+    let mounted = MountedFatfs::mount(fatfs, config::MOUNT_PATH, config::MAX_FILE_DESCRIPTORS)?;
+    
+    log::info!("✅ SD Card mounted successfully at '{}'!", config::MOUNT_PATH);
+    Ok(mounted)
 }
-
-impl StorageDriver for MockStorageDriver {
-    fn mount(&self) -> Result<(), StorageError> {
-        let mut mounted = self.mounted.lock().unwrap();
-        if *mounted {
-            return Err(StorageError::AlreadyMounted);
-        }
-
-        std::fs::create_dir_all(&self.mount_point).map_err(|_| StorageError::MountFailed)?;
-        *mounted = true;
-        Ok(())
-    }
-
-    fn unmount(&self) -> Result<(), StorageError> {
-        let mut mounted = self.mounted.lock().unwrap();
-        if !*mounted {
-            return Err(StorageError::NotMounted);
-        }
-        *mounted = false;
-        Ok(())
-    }
-
-    fn mount_point(&self) -> &str {
-        &self.mount_point
-    }
-
-    fn is_mounted(&self) -> bool {
-        *self.mounted.lock().unwrap()
-    }
-}
-
-impl StorageDriver for SpiSdCardDriver {
-    fn mount(&self) -> Result<(), StorageError> {
-        let mut mounted = self.mounted.lock().unwrap();
-        if *mounted {
-            return Err(StorageError::AlreadyMounted);
-        }
-        drop(mounted);
-
-        #[cfg(target_os = "espidf")]
-        {
-            let mount_point = self.mount_point.clone();
-            std::thread::spawn(move || {
-                log::info!("Starting SD card initialization in background");
-                match initialize_sd_card(&mount_point) {
-                    Ok(()) => log::info!("SD card initialization completed"),
-                    Err(err) => log::error!("SD card initialization failed: {}", err),
-                }
-            });
-        }
-
-        #[cfg(not(target_os = "espidf"))]
-        {
-            std::fs::create_dir_all(&self.mount_point).map_err(|_| StorageError::MountFailed)?;
-            let mut mounted = self.mounted.lock().unwrap();
-            *mounted = true;
-        }
-
-        Ok(())
-    }
-
-    fn unmount(&self) -> Result<(), StorageError> {
-        let mut mounted = self.mounted.lock().unwrap();
-        if !*mounted {
-            return Err(StorageError::NotMounted);
-        }
-        *mounted = false;
-        Ok(())
-    }
-
-    fn mount_point(&self) -> &str {
-        &self.mount_point
-    }
-
-    fn is_mounted(&self) -> bool {
-        *self.mounted.lock().unwrap()
-    }
-}
-
