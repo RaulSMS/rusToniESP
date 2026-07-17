@@ -11,16 +11,35 @@ static FILES_TEMPLATE: &str = include_str!("../web_assets/files.html");
 /// Helper to safely convert an optional OS error code into a concrete EspError
 fn map_io_err(e: std::io::Error) -> EspError {
     let code = e.raw_os_error().unwrap_or(-1);
-    // Ensure code is non-zero so NonZeroI32::new doesn't return None
     let non_zero_code = core::num::NonZeroI32::new(if code == 0 { -1 } else { code }).unwrap();
     EspError::from_non_zero(non_zero_code)
+}
+
+/// Recursively deletes a directory structure from the bottom up.
+/// Necessary for ESP-IDF FAT VFS because a directory block cannot be unlinked
+/// if it contains any files or child directories.
+fn native_recursive_delete<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
+    let path = path.as_ref();
+    if path.is_dir() {
+        for entry in fs::read_dir(path)? {
+            let entry = entry?;
+            let child_path = entry.path();
+            if child_path.is_dir() {
+                native_recursive_delete(&child_path)?;
+            } else {
+                fs::remove_file(&child_path)?;
+            }
+        }
+        fs::remove_dir(path)?;
+    } else {
+        fs::remove_file(path)?;
+    }
+    Ok(())
 }
 
 pub fn handle_get_files(connection: &mut EspHttpConnection) -> Result<(), EspError> {
     let uri = connection.uri();
     let target_path = extract_query_param(&uri, "path").unwrap_or_else(|| MOUNT_PATH.to_string());
-
-    let mut file_rows = String::new();
 
     let nav_html = if target_path != MOUNT_PATH {
         let path_obj = Path::new(&target_path);
@@ -32,6 +51,18 @@ pub fn handle_get_files(connection: &mut EspHttpConnection) -> Result<(), EspErr
         "<span>Main Storage Root</span>".to_string()
     };
 
+    // Split the template to stream rows dynamically instead of accumulating a massive String
+    let template_parts: Vec<&str> = FILES_TEMPLATE.split("{1}").collect();
+    let header_part = template_parts.get(0).cloned().unwrap_or("").replace("{0}", &target_path).replace("{2}", &nav_html);
+    let footer_part = template_parts.get(1).cloned().unwrap_or("");
+
+    // Start streaming response headers
+    connection.initiate_response(200, Some("OK"), &[("Content-Type", "text/html")])?;
+    
+    // Stream HTML Header
+    connection.write(header_part.as_bytes())?;
+
+    // Stream Directory Rows incrementally
     match fs::read_dir(&target_path) {
         Ok(entries) => {
             for entry in entries.flatten() {
@@ -48,17 +79,17 @@ pub fn handle_get_files(connection: &mut EspHttpConnection) -> Result<(), EspErr
                     Err(_) => (false, 0),
                 };
 
-                if is_dir {
-                    file_rows.push_str(&format!(
+                let row = if is_dir {
+                    format!(
                         "<tr>
                             <td>📁 <a href=\"/files?path={}\">{}</a></td>
                             <td>&lt;DIR&gt;</td>
                             <td><button class=\"btn btn-del\" onclick=\"deleteItem('{}')\">Delete</button></td>
                         </tr>",
                         full_item_path, file_name, full_item_path
-                    ));
+                    )
                 } else {
-                    file_rows.push_str(&format!(
+                    format!(
                         "<tr>
                             <td>📄 {}</td>
                             <td>{} bytes</td>
@@ -68,24 +99,23 @@ pub fn handle_get_files(connection: &mut EspHttpConnection) -> Result<(), EspErr
                             </td>
                         </tr>",
                         file_name, file_size, full_item_path, full_item_path
-                    ));
-                }
+                    )
+                };
+
+                // Flush immediately to keep RAM consumption down to a few bytes
+                connection.write(row.as_bytes())?;
             }
         }
         Err(e) => {
-            file_rows.push_str(&format!(
+            let error_row = format!(
                 "<tr><td colspan='3' style='color:#ef4444;'>Error opening directory: {:?}</td></tr>", e
-            ));
+            );
+            connection.write(error_row.as_bytes())?;
         }
     }
 
-    let html = FILES_TEMPLATE
-        .replace("{0}", &target_path)
-        .replace("{1}", &file_rows)
-        .replace("{2}", &nav_html);
-
-    connection.initiate_response(200, Some("OK"), &[("Content-Type", "text/html")])?;
-    connection.write(html.as_bytes())?;
+    // Stream HTML Footer
+    connection.write(footer_part.as_bytes())?;
     Ok(())
 }
 
@@ -193,40 +223,19 @@ pub fn handle_delete(connection: &mut EspHttpConnection) -> Result<(), EspError>
         return Ok(());
     }
 
-    let result = if path_obj.is_dir() {
-        log::info!("🗑️ Emptying and removing directory: {}", target_to_delete);
-        
-        // 1. Manually clear files inside the directory first to ensure it's empty
-        // (ESP-IDF's FAT VFS requires a directory to be completely empty before removal)
-        if let Ok(entries) = fs::read_dir(path_obj) {
-            for entry in entries.flatten() {
-                let p = entry.path();
-                if p.is_file() {
-                    let _ = fs::remove_file(p);
-                }
-            }
-        }
-        
-        // 2. Use standard remove_dir instead of remove_dir_all
-        fs::remove_dir(path_obj)
-    } else {
-        log::info!("🗑️ Removing file: {}", target_to_delete);
-        fs::remove_file(path_obj)
-    };
-
-    match result {
+    log::info!("🗑️ Executing deep recursive deletion on: {}", target_to_delete);
+    match native_recursive_delete(path_obj) {
         Ok(_) => {
-            log::info!("✅ Successfully deleted asset node.");
+            log::info!("✅ Successfully pruned targeted asset node.");
             connection.initiate_response(200, Some("OK"), &[])?;
             connection.write(b"Deleted")?;
         }
         Err(e) => {
             log::error!("❌ Failed deleting asset: {:?}", e);
             
-            // Helpful warning for macOS meta-directories
             if target_to_delete.contains("SPOTLI") || target_to_delete.contains("TRASHE") {
                 connection.initiate_response(403, Some("Forbidden"), &[])?;
-                connection.write(b"Cannot delete system-protected index directories")?;
+                connection.write(b"Cannot alter system-protected metadata volumes")?;
             } else {
                 connection.initiate_response(500, Some("Internal Server Error"), &[])?;
                 connection.write(format!("Deletion failure: {:?}", e).as_bytes())?;
