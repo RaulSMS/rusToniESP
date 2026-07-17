@@ -1,0 +1,12 @@
+[board]
+name = "esp32"
+target = "xtensa-esp32-espidf"
+mcuversion = "esp32"
+flash_size = "4"
+
+[sd]
+cs_pin = 5
+sck_pin = 18
+miso_pin = 19
+mosi_pin = 23
+spi_clock_hz = 4000000
