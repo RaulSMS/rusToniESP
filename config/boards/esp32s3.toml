@@ -5,8 +5,8 @@ mcuversion = "esp32s3"
 flash_size = "16"
 
 [sd]
-cs_pin = 5
-sck_pin = 12
-miso_pin = 13
+cs_pin = 10
+sck_pin = 8
+miso_pin = 18
 mosi_pin = 11
-spi_clock_hz = 1000000
+spi_clock_hz = 4000000

@@ -3,10 +3,14 @@ use std::fs::{self, File};
 use std::io::Write;
 use std::path::Path;
 
-use rus_toni_esp::board::config;
+use rus_toni_esp::board::config::{self, BoardConfig};
 use rus_toni_esp::drivers::storage;
 use rus_toni_esp::services::storage_service;
 use rus_toni_esp::util;
+
+/// Instantiate our global immutable board profile at compile time.
+/// This matches the static requirement for hardware lifecycle stability.
+static BOARD: BoardConfig = BoardConfig::load();
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // CRITICAL: Links internal lower level C hooks required for ESP32 runtimes
@@ -16,13 +20,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     esp_idf_svc::log::EspLogger::initialize_default();
 
     log::info!("=== SPI SD Card Debugging via ESP-IDF VFS std::fs ===");
+    log::info!("Initializing Profile: {} [{}]", BOARD.name, BOARD.mcu);
     
     util::print_memory_summary("Baseline at Boot");
 
-    let peripherals = Peripherals::take()?;
+    let mut peripherals = Peripherals::take()?;
 
     // Initialize and Mount SD Card via infrastructure drivers
-    let _mounted_fatfs = storage::init_sd_card(peripherals)?;
+    let _mounted_fatfs = storage::init_sd_card(&mut peripherals, &BOARD)?;
 
     let file_path = format!("{}/RUST_LOG.TXT", config::MOUNT_PATH);
 
