@@ -19,6 +19,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     esp_idf_svc::sys::link_patches();
     esp_idf_svc::log::EspLogger::initialize_default();
 
+    // Re-routed internally via clean shared capture logic block
     util::print_memory_summary("Baseline at Boot");
 
     let mut peripherals = Peripherals::take()?;
