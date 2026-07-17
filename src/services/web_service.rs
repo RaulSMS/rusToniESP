@@ -35,7 +35,6 @@ impl WebServerContext {
             let status_text = if is_high { "ON" } else { "OFF" };
             let btn_color = if is_high { "#ef4444" } else { "#22c55e" };
 
-            // Inject template arguments using runtime replacement string operations
             let html = INDEX_TEMPLATE
                 .replace("{0}", btn_color)
                 .replace("{1}", status_text);
@@ -98,7 +97,6 @@ impl WebServerContext {
                 }
             }
 
-            // Inject template arguments using runtime replacement string operations
             let html = FILES_TEMPLATE
                 .replace("{0}", MOUNT_PATH)
                 .replace("{1}", &file_rows);
@@ -108,14 +106,33 @@ impl WebServerContext {
             Ok(())
         })?;
 
-        // 4. Raw Binary POST Upload Endpoint handler
+        // 4. Raw Binary POST Upload Endpoint handler (Sanitizes filename length and type)
         server.fn_handler("/upload", esp_idf_svc::http::Method::Post, move |mut request| -> Result<(), EspIOError> {
-            let file_name = request
+            let raw_file_name = request
                 .header("X-File-Name")
                 .map(|s| s.to_string())
-                .unwrap_or_else(|| "uploaded_file.bin".to_string());
+                .unwrap_or_else(|| "up_file.bin".to_string());
 
-            let full_path = format!("{}/{}", MOUNT_PATH, file_name);
+            // URL decode file name to drop percentage escapes
+            let decoded_name = percent_encoding::percent_decode_str(&raw_file_name)
+                .decode_utf8_lossy()
+                .into_owned();
+
+            // Sanitize filename to fit legacy FAT constraints safely
+            let safe_name = {
+                let parts: Vec<&str> = decoded_name.split('.').collect();
+                let ext = if parts.len() > 1 { parts.last().unwrap_or(&"bin") } else { &"bin" };
+                let base = parts[0];
+
+                // Strip non-alphanumeric and truncate base stem to 8 characters max
+                let filtered_base: String = base.chars().filter(|c| c.is_ascii_alphanumeric()).collect();
+                let safe_base = if filtered_base.is_empty() { "file".to_string() } else { filtered_base.chars().take(8).collect() };
+                let safe_ext: String = ext.chars().filter(|c| c.is_ascii_alphanumeric()).take(3).collect();
+
+                format!("{}.{}", safe_base, safe_ext).to_lowercase()
+            };
+
+            let full_path = format!("{}/{}", MOUNT_PATH, safe_name);
             log::info!("💾 Streaming incoming upload directly to: {}", full_path);
 
             match File::create(&full_path) {
@@ -137,7 +154,7 @@ impl WebServerContext {
                         total_bytes += bytes_read;
                     }
 
-                    log::info!("✅ File write complete! Saved {} bytes.", total_bytes);
+                    log::info!("✅ File write complete! Saved {} bytes as: {}", total_bytes, safe_name);
                     let mut response = request.into_ok_response()?;
                     response.write(b"Upload completed successfully")?;
                 }

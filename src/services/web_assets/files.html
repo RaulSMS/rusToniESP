@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SD Card Storage</title>
     <style>
@@ -57,7 +58,7 @@
 
             fetch('/upload', {
                 method: 'POST',
-                headers: { 'X-File-Name': file.name },
+                headers: { 'X-File-Name': encodeURIComponent(file.name) },
                 body: file
             }).then(res => {
                 if (res.ok) {
