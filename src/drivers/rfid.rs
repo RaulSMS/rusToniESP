@@ -37,9 +37,14 @@ impl<'a> RfidDriver<'a> {
         let spi_interface = spi_interface_base.with_delay(delay_closure);
 
         // 3. Initialize driver state machines
-        let mfrc522 = Mfrc522::new(spi_interface)
+        let mut mfrc522 = Mfrc522::new(spi_interface)
             .init()
             .map_err(|_| EspError::from_infallible::<-1>())?;
+
+        match mfrc522.version() {
+            Ok(ver) => log::info!("📡 MFRC522 Hardware Version Reg: 0x{:02X}", ver),
+            Err(e) => log::error!("❌ Failed to read MFRC522 version: {:?}", e),
+        }
 
         Ok(Self {
             mfrc522,
@@ -49,18 +54,28 @@ impl<'a> RfidDriver<'a> {
 
     /// Polls the reader for a card presence. Returns the UID string if successful.
     pub fn read_card_uid(&mut self) -> Option<String> {
-        if let Ok(atqa) = self.mfrc522.reqa() {
-            if let Ok(uid) = self.mfrc522.select(&atqa) {
-                let uid_bytes = uid.as_bytes();
-                
-                let hex_string: String = uid_bytes
-                    .iter()
-                    .map(|b| format!("{:02X}", b))
-                    .collect();
-                
-                let _ = self.mfrc522.hlta();
-                
-                return Some(hex_string);
+        match self.mfrc522.reqa() {
+            Ok(atqa) => {
+                log::info!("✅ reqa() succeeded");
+                match self.mfrc522.select(&atqa) {
+                    Ok(uid) => {
+                        let uid_bytes = uid.as_bytes();
+                        let hex_string: String = uid_bytes
+                            .iter()
+                            .map(|b| format!("{:02X}", b))
+                            .collect();
+                        let _ = self.mfrc522.hlta();
+                        return Some(hex_string);
+                    }
+                    Err(e) => {
+                        log::error!("❌ select() failed: {:?}", e);
+                    }
+                }
+            }
+            Err(e) => {
+                if !matches!(e, mfrc522::Error::Timeout) {
+                    log::error!("❌ reqa() error: {:?}", e);
+                }
             }
         }
         None

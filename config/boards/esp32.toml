@@ -11,9 +11,9 @@ mosi_pin = 23
 
 [sd]
 cs_pin = 5
-spi_clock_hz = 4000000
+spi_clock_hz = 1000000
 
 [rfid]
-cs_pin = 4
-rst_pin = 22
+cs_pin = 22
+rst_pin = 21
 spi_clock_hz = 1000000

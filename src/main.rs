@@ -38,25 +38,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let miso = BOARD.get_any_pin(BOARD.spi_miso_pin, &mut peripherals)?;
     
     let sd_cs_pin = BOARD.get_any_pin(BOARD.sd_cs_pin, &mut peripherals)?;
+    let mut sd_cs_output = esp_idf_svc::hal::gpio::PinDriver::output(sd_cs_pin)?;
+    sd_cs_output.set_high()?;
     
     let rfid_cs_pin = BOARD.get_any_pin(BOARD.rfid_cs_pin, &mut peripherals)?; 
     let rfid_rst_pin = BOARD.get_any_pin(BOARD.rfid_rst_pin, &mut peripherals)?; 
     
     let led_pin = BOARD.get_any_pin(2, &mut peripherals)?;
 
-    // Configure DriverConfig to use DMA, enabling large block transfers required for SD/FATFS
+    // Configure DriverConfig without DMA to ensure compatibility with all transaction buffers
     let mut driver_config = DriverConfig::new();
-    driver_config.dma = Dma::Channel2(4096);
+    driver_config.dma = Dma::Disabled;
     
     // Allocate the underlying hardware bus context inside an Arc container
     let spi_driver = Arc::new(SpiDriver::new(
-        peripherals.spi2,
+        peripherals.spi3,
         sclk,
         mosi,
         Some(miso),
         &driver_config,
     )?);
 
+    /*
     // 2. Initialize and Mount SD Card Driver Stack using pre-resolved pin
     let _mounted_fatfs = storage::init_sd_card(sd_cs_pin, &BOARD, &spi_driver)?;
 
@@ -67,6 +70,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // List the remaining directory state
     storage_service::list_dir(Path::new(config::MOUNT_PATH), 0);
+    */
 
     // -------------------------------------------------------------------------
     // 💡 RFID Subsystem Integration (Shared SPI Client Slot)

@@ -41,16 +41,6 @@ This file serves as the strict operational persona, technical boundaries, and co
 
 ---
 
-## 🧪 Testing & CI Policy
-
-Every feature or module added to this project **must include tests**. Tests are the primary verification mechanism and are automatically run in CI via **[`.github/workflows/rust_ci.yml`](.github/workflows/rust_ci.yml)**.
-
-### Test tiers
-
-| Tier | What to write | Where it runs |
-|------|---------------|---------------|
-| **Unit tests** | Pure-logic functions in `core/`, `audio/playlist`, `rfid/config_mapping`, etc. Use `#[test]` inside `#[cfg(test)]` blocks. Mock hardware traits with simple `struct MockXxx`. | `cargo test --lib` on host (CI `unit-tests` job) |
-| **Integration / sim tests** | End-to-end flows using Wokwi — assert expected serial output with `--expect-text` / `--fail-text`. Define scenarios in YAML via `--scenario`. | `wokwi-cli` (CI `wokwi-sim` job — enable when first scenario is ready) |
 
 ### Rules for agents
 
@@ -67,20 +57,8 @@ When answering questions or generating code updates for this project:
 - Target the Standard library (`std`) environment via ESP-IDF.
 - Strictly adhere to standard linting and formatting policies (Ruff-style precision for tools, and idiomatic `rustfmt` conventions).
 - Proactively flag potential hardware bottlenecks, pin assignment conflicts, or unsafe peripheral access patterns.
-- Note target differences (e.g. `xtensa-esp32s3-espidf` vs `xtensa-esp32-espidf` depending on physical board choice).
-- **Simulation / Testing:** Use the `wokwi-cli` terminal tool to run and verify logic in the Wokwi simulator. The MCP server integration (`wokwi-cli mcp`) is **not available** — use only the CLI directly.
-  - Simulator config files: `diagram.json` and `wokwi.toml`. Target is `esp32s3` → build for `xtensa-esp32s3-espidf`.
-  - **Key `wokwi-cli` options to use:**
-    - `--elf <path>` — point to the compiled ELF binary (e.g. `target/xtensa-esp32s3-espidf/debug/<crate>.elf`)
-    - `--diagram-file <path>` — override the default `diagram.json` if needed
-    - `--timeout <ms>` — set simulation timeout (default 30 000 ms)
-    - `--expect-text <string>` — assert expected serial output (use for pass/fail CI checks)
-    - `--fail-text <string>` — fail the run if a specific string appears in serial output
-    - `--serial-log-file <path>` — capture all serial output to a file for later inspection
-    - `--interactive` — redirect stdin to the simulated serial port for manual testing
-    - `--scenario <path>` — drive the simulation via a YAML scenario file
-    - `--screenshot-part <id> --screenshot-time <ms> --screenshot-file <path>` — capture a screenshot of a specific part at a given simulation time
-    - `--vcd-file <path>` — dump a logic-analyzer VCD file for signal tracing
-    - `-q / --quiet` — suppress status messages (useful in scripts)
-  - **Typical run command:** `wokwi-cli --elf target/xtensa-esp32s3-espidf/debug/rus-toni-esp.elf --timeout 60000 --serial-log-file sim.log .`
-  - Ensure hardware features are compatible or modularized to work gracefully during simulation runs.
+
+
+## for simulating or testing your changes
+
+Just promt the user to execute the code or simulate it and give you the answer
