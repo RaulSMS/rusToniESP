@@ -31,6 +31,9 @@ embedded-io = "0.6.1"
 
 # Async and timing controls
 embassy-time = { version = "0.5", features = ["generic-queue-8"] }
+heapless = "0.9.1"
+enumset = "1.1.13"
+percent-encoding = "2.3.2"
 
 
 [build-dependencies]

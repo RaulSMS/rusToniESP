@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Telemetry Dashboard</title>
+    <style>
+        :root {
+            --background: #0f0f14;
+            --surface: #16161f;
+            --surface-hover: #1c1c27;
+            --primary: #3b82f6;
+            --accent: #10b981;
+            --danger: #ef4444;
+            --text: #f3f4f6;
+            --muted: #9ca3af;
+            --border: #27273a;
+        }
+
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--background);
+            color: var(--text);
+            padding: 2rem 1rem;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .nav-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .nav-link {
+            color: var(--muted);
+            text-decoration: none;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            transition: color 0.2s;
+        }
+
+        .nav-link:hover {
+            color: var(--primary);
+        }
+
+        .card {
+            background-color: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+        }
+
+        h2 {
+            margin-top: 0;
+            margin-bottom: 0;
+            font-size: 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .mem-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1rem;
+        }
+
+        .mem-stat {
+            background-color: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .mem-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--muted);
+        }
+
+        .mem-val {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .chip-meta {
+            margin-top: 1.25rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            font-size: 0.85rem;
+            color: var(--muted);
+        }
+
+        .meta-row {
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+        }
+
+        .task-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.35rem;
+            margin-top: 0.25rem;
+        }
+
+        .task-badge {
+            background: #222235;
+            color: #cdd9e5;
+            border: 1px solid var(--border);
+            padding: 0.15rem 0.45rem;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.75rem;
+        }
+
+        .btn {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: var(--muted);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 0.25rem 0.5rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-secondary:hover {
+            color: var(--text);
+            background: var(--surface-hover);
+            border-color: var(--muted);
+        }
+
+        ul {
+            margin: 0;
+            padding-left: 1.2rem;
+        }
+
+        li {
+            margin-bottom: 0.25rem;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <!-- Top Navigation Bar -->
+        <div class="nav-header">
+            <a href="/" class="nav-link">⬅️ Back to Dashboard</a>
+        </div>
+
+        <!-- Interactive Control Hardware Component -->
+        <section class="card" style="margin-bottom: 1.5rem;">
+            <h2>🎛️ Dynamic Peripheral Control</h2>
+            <p style="color: var(--muted); font-size: 0.9rem; margin: 0.5rem 0 1rem 0;">Toggle onboard hardware indicator status registers manually.</p>
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <button class="btn" style="background: var(--primary);" onclick="toggleLed(true)">🟢 Turn LED ON</button>
+                <button class="btn" style="background: var(--danger);" onclick="toggleLed(false)">🔴 Turn LED OFF</button>
+                <span id="led-status-msg" style="font-size: 0.85rem; color: var(--accent);"></span>
+            </div>
+        </section>
+
+        <!-- Expanded Hardware Metrics Board -->
+        <section class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h2>📊 Detailed Hardware Telemetry</h2>
+                <button class="btn-secondary" style="font-size: 0.8rem;" onclick="toggleHelp()">❓ Understand Metrics</button>
+            </div>
+
+            <!-- Contextual Help Box -->
+            <div id="telemetry-help" style="display: none; background: #1a1a24; border-left: 4px solid var(--accent); padding: 1rem; margin: 1rem 0; border-radius: 4px; font-size: 0.9rem; line-height: 1.4;">
+                <p style="margin: 0 0 0.5rem 0;"><strong style="color: var(--accent);">💡 How to read these limits:</strong></p>
+                <ul style="color: var(--muted);">
+                    <li><strong>Internal SRAM (Used):</strong> The system's fast on-chip data memory. Watch this percentage closely; if it approaches >90%, dynamic allocations (`Box`, `Vec`) risk throwing uncatchable heap panics.</li>
+                    <li><strong>Main Task Stack Margin:</strong> The deep stack safety headroom left for your execution thread loop. If this dropped footprint drops below <strong>2.0 KB</strong>, your application task is dangerously close to a stack overflow.</li>
+                </ul>
+            </div>
+
+            <div class="mem-grid" style="margin-top: 1rem;">
+                <div class="mem-stat">
+                    <span class="mem-label">Total Free Heap</span>
+                    <span class="mem-val" id="free-heap">-- KB</span>
+                </div>
+                <div class="mem-stat">
+                    <span class="mem-label">Lowest Free Heap</span>
+                    <span class="mem-val" id="lowest-heap">-- KB</span>
+                </div>
+                <div class="mem-stat">
+                    <span class="mem-label">Internal SRAM (Used)</span>
+                    <span class="mem-val" id="sram-heap">-- KB</span>
+                </div>
+                <div class="mem-stat">
+                    <span class="mem-label">External PSRAM</span>
+                    <span class="mem-val" id="psram-heap">-- KB</span>
+                </div>
+                <div class="mem-stat">
+                    <span class="mem-label">Main Task Stack Margin</span>
+                    <span class="mem-val" id="main-stack" style="color: var(--accent);">-- KB</span>
+                </div>
+                <div class="mem-stat">
+                    <span class="mem-label">Core Temp</span>
+                    <span class="mem-val" id="core-temp" style="color: var(--danger);">-- °C</span>
+                </div>
+            </div>
+
+            <div class="chip-meta">
+                <div class="meta-row">
+                    <span>CPU Cores: <strong id="chip-cores">--</strong></span>
+                    <span>Active RTOS Tasks: <strong id="rtos-tasks" style="color: var(--primary);">--</strong></span>
+                </div>
+                <div>
+                    <span style="font-size: 0.8rem; display: block; margin-bottom: 0.25rem;">Active Task Registration List:</span>
+                    <div id="task-badges-box" class="task-container">
+                        <!-- Instantiated tasks inject dynamically here -->
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-top: 1.25rem; text-align: right;">
+                <button class="btn" style="background: var(--accent);" onclick="updateMemoryStats()">🔄 Refresh Metrics</button>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        function toKb(bytes) {
+            return (bytes / 1024).toFixed(1) + " KB";
+        }
+
+        function toggleHelp() {
+            const helpBox = document.getElementById('telemetry-help');
+            helpBox.style.display = helpBox.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function toggleLed(state) {
+            const targetUri = state ? '/api/led/on' : '/api/led/off';
+            const msgNode = document.getElementById('led-status-msg');
+            
+            fetch(targetUri, { method: 'POST' })
+                .then(res => {
+                    if(res.ok) {
+                        msgNode.innerText = `Command acknowledged: LED set to ${state ? 'ON' : 'OFF'}`;
+                        msgNode.style.color = "var(--accent)";
+                    } else {
+                        throw new Error();
+                    }
+                })
+                .catch(() => {
+                    msgNode.innerText = "Error transmitting execution vector peripheral state.";
+                    msgNode.style.color = "var(--danger)";
+                });
+        }
+
+        function updateMemoryStats() {
+            fetch('/api/memory')
+                .then(res => {
+                    if (!res.ok) throw new Error("Metrics payload corrupted");
+                    return res.json();
+                })
+                .then(data => {
+                    document.getElementById('free-heap').innerText = toKb(data.free_heap);
+                    document.getElementById('lowest-heap').innerText = toKb(data.lowest_heap);
+                    
+                    const usedSram = data.internal_total - data.internal_free;
+                    const sramPct = ((usedSram / data.internal_total) * 100).toFixed(0);
+                    document.getElementById('sram-heap').innerHTML = `${toKb(data.internal_free)} <span style="font-size:0.8rem; color:var(--muted);">(${sramPct}% used)</span>`;
+                    
+                    document.getElementById('psram-heap').innerText = data.psram_free > 0 ? toKb(data.psram_free) : "None";
+                    
+                    const stackMarginElement = document.getElementById('main-stack');
+                    stackMarginElement.innerText = toKb(data.http_stack_margin);
+                    
+                    if (data.http_stack_margin < 2048) {
+                        stackMarginElement.style.color = 'var(--danger)';
+                    } else {
+                        stackMarginElement.style.color = 'var(--accent)';
+                    }
+                    
+                    document.getElementById('core-temp').innerText = data.temperature > 0 ? `${data.temperature} °C` : "N/A";
+                    document.getElementById('chip-cores').innerText = data.cores;
+                    document.getElementById('rtos-tasks').innerText = data.task_count;
+
+                    const badgeBox = document.getElementById('task-badges-box');
+                    badgeBox.innerHTML = '';
+                    if (data.task_names && Array.isArray(data.task_names)) {
+                        data.task_names.forEach(name => {
+                            const badge = document.createElement('span');
+                            badge.className = 'task-badge';
+                            badge.innerText = name;
+                            badgeBox.appendChild(badge);
+                        });
+                    }
+                })
+                .catch(err => {
+                    console.error("Failed to parse telemetry status frame:", err);
+                });
+        }
+
+        document.addEventListener("DOMContentLoaded", updateMemoryStats);
+    </script>
+</body>
+</html>

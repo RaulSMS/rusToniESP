@@ -1,71 +1,69 @@
 use esp_idf_hal::peripherals::Peripherals;
-use std::fs::{self, File};
-use std::io::Write;
+use esp_idf_svc::eventloop::EspSystemEventLoop;
+use esp_idf_svc::nvs::EspDefaultNvsPartition;
+use esp_idf_svc::wifi::{AccessPointConfiguration, AuthMethod, Configuration, EspWifi, Protocol};
 use std::path::Path;
+
+use enumset::enum_set;
+use heapless::String;
 
 use rus_toni_esp::board::config::{self, BoardConfig};
 use rus_toni_esp::drivers::storage;
 use rus_toni_esp::services::storage_service;
+use rus_toni_esp::services::web_service::WebServerContext;
 use rus_toni_esp::util;
 
-/// Instantiate our global immutable board profile at compile time.
-/// This matches the static requirement for hardware lifecycle stability.
 static BOARD: BoardConfig = BoardConfig::load();
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // CRITICAL: Links internal lower level C hooks required for ESP32 runtimes
     esp_idf_svc::sys::link_patches();
-
-    // Initialize global log macro router
     esp_idf_svc::log::EspLogger::initialize_default();
 
-    log::info!("=== SPI SD Card Debugging via ESP-IDF VFS std::fs ===");
-    log::info!("Initializing Profile: {} [{}]", BOARD.name, BOARD.mcu);
-    
+    // Re-routed internally via clean shared capture logic block
     util::print_memory_summary("Baseline at Boot");
 
     let mut peripherals = Peripherals::take()?;
 
-    // Initialize and Mount SD Card via infrastructure drivers
+    // 1. Initialize and Mount SD Card Driver Stack
     let _mounted_fatfs = storage::init_sd_card(&mut peripherals, &BOARD)?;
 
-    let file_path = format!("{}/RUST_LOG.TXT", config::MOUNT_PATH);
-
-    log::info!("👉 Writing a new file 'RUST_LOG.TXT' using std::fs::File...");
-    match File::create(&file_path) {
-        Ok(mut file) => {
-            let data = b"Hello from Rust on Wokwi ESP32!\nWritten dynamically using the native std::fs library via ESP-IDF VFS.";
-            match file.write_all(data) {
-                Ok(_) => log::info!("✅ Successfully wrote to {}", file_path),
-                Err(e) => log::error!("❌ Failed to write to file: {:?}", e),
-            }
-        }
-        Err(e) => log::error!("❌ Failed to create file: {:?}", e),
+    // 2. Execute the isolated read/write/delete testing workflow
+    if let Err(e) = util::run_sd_card_init_test(config::MOUNT_PATH) {
+        log::error!("❌ Transient SD Card initialization verification failed: {:?}", e);
     }
 
-    log::info!("👉 Reading file contents using std::fs::read_to_string...");
-    match fs::read_to_string(&file_path) {
-        Ok(contents) => {
-            log::info!("📖 File read successfully! Contents below:\n-----------------------------\n{}\n-----------------------------", contents);
-        }
-        Err(e) => log::error!("❌ Failed to read file: {:?}", e),
-    }
-
-    if let Err(e) = storage_service::generate_nested_test_files(config::MOUNT_PATH) {
-        log::error!("❌ Error generating stress test files: {:?}", e);
-    }
-
-    util::print_memory_summary("Before Traversal");
-
-    log::info!("\n📂 Listando contenido completo de la raíz del disco:");
-    log::info!("------------------------------------------------------------");
-    
+    // List the remaining directory state (Should show only your persistent files)
     storage_service::list_dir(Path::new(config::MOUNT_PATH), 0);
-    
-    log::info!("------------------------------------------------------------");
 
-    util::print_memory_summary("After Traversal (Peak Memory & Stack Usage Checked)");
+    // 3. Fetch LED pin
+    let led_pin = BOARD.get_any_pin(2, &mut peripherals)?;
 
-    log::info!("🎉 SD Card self-check finished successfully! Exiting main program execution.");
-    Ok(())
+    // 4. Network Stack Setup
+    let nvs = EspDefaultNvsPartition::take()?;
+    let sys_loop = EspSystemEventLoop::take()?;
+    let mut wifi = EspWifi::new(peripherals.modem, sys_loop.clone(), Some(nvs))?;
+
+    let ssid = String::<32>::try_from("ESP32-Toni-Net")?;
+    let password = String::<64>::try_from("")?;
+
+    let ap_config = AccessPointConfiguration {
+        ssid,
+        ssid_hidden: false,
+        channel: 6,
+        secondary_channel: None,
+        protocols: enum_set!(Protocol::P802D11BGN),
+        auth_method: AuthMethod::None,
+        password,
+        max_connections: 4,
+    };
+
+    wifi.set_configuration(&Configuration::AccessPoint(ap_config))?;
+    wifi.start()?;
+
+    // 5. Run Web Server Services
+    let _web_server = WebServerContext::init(led_pin)?;
+
+    loop {
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
 }

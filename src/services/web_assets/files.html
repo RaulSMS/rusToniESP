@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SD Card Storage - rusToniESP</title>
+    <style>
+        :root {
+            --bg: #121214; --surface: #1a1a1e; --border: #2a2a32;
+            --text: #e1e1e6; --muted: #a8a8b3; --primary: #4ade80;
+            --primary-hover: #22c55e; --accent: #3b82f6; --danger: #f87171;
+        }
+        @media (prefers-color-scheme: light) {
+            :root {
+                --bg: #f4f4f5; --surface: #ffffff; --border: #e4e4e7;
+                --text: #18181b; --muted: #71717a; --primary: #16a34a;
+                --primary-hover: #15803d; --accent: #2563eb; --danger: #dc2626;
+            }
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; padding: 1rem; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        
+        h2, h3 { color: var(--text); margin-bottom: 1rem; font-size: 1.4rem; }
+        h3 { font-size: 1.1rem; color: var(--muted); }
+
+        .nav-links { margin-bottom: 1.5rem; font-size: 0.95rem; }
+        .nav-links a { color: var(--primary); text-decoration: none; font-weight: 500; }
+        .nav-links a:hover { text-decoration: underline; }
+
+        /* Upload Container Card */
+        .upload-box { background: var(--surface); border: 1px dashed var(--border); padding: 1.25rem; border-radius: 8px; margin-bottom: 1.5rem; }
+        input[type="file"] { color: var(--muted); margin-right: 0.5rem; font-size: 0.9rem; }
+
+        /* Table Architecture */
+        table { width: 100%; margin: 1.5rem 0; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid var(--border); font-size: 0.95rem; }
+        th { background-color: rgba(255,255,255,0.02); color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: 0.8rem; letter-spacing: 0.05em; }
+        tr:hover { background-color: rgba(255,255,255,0.01); }
+        td a { color: var(--accent); text-decoration: none; font-weight: 500; }
+        td a:hover { text-decoration: underline; }
+
+        /* Global Control Buttons */
+        .btn { display: inline-block; padding: 0.4rem 0.8rem; border: none; border-radius: 4px; font-weight: 500; cursor: pointer; font-size: 0.85rem; text-decoration: none; text-align: center; color: #fff; background: var(--accent); }
+        .btn-primary { background: var(--primary); color: #121214; font-weight: 600; }
+        .btn-del { background: var(--danger); color: #fff; margin-left: 5px; }
+        .btn-down { background: rgba(59, 130, 246, 0.1); color: var(--accent); border: 1px solid var(--border); text-decoration: none; padding: 4px 8px; border-radius: 4px; font-size: 0.85rem; font-weight: 500; }
+        .btn-down:hover { background: var(--accent); color: #fff; text-decoration: none; }
+        .btn:hover { opacity: 0.9; }
+
+        .back-link { display: block; text-align: center; margin-top: 2rem; color: var(--primary); text-decoration: none; font-size: 0.95rem; font-weight: 500; }
+        .back-link:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Index of {0}</h2>
+        
+        <div class="nav-links">
+            {2}
+        </div>
+
+        <div class="upload-box">
+            <h3>Upload File to This Directory</h3>
+            <div style="margin-top: 0.75rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                <input type="file" id="fileInput">
+                <button type="button" class="btn btn-primary" onclick="uploadFile()">Upload Asset</button>
+            </div>
+            <div id="status" style="margin-top: 10px; font-weight: bold; font-size: 0.9rem;"></div>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Size / Type</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {1}
+            </tbody>
+        </table>
+        <a href="/" class="back-link">&larr; Back to Dashboard</a>
+    </div>
+
+    <script>
+        const currentPath = "{0}";
+
+        function uploadFile() {
+            const input = document.getElementById('fileInput');
+            const status = document.getElementById('status');
+            if (input.files.length === 0) {
+                status.innerText = "Please select a file first.";
+                status.style.color = "var(--danger)";
+                return;
+            }
+            const file = input.files[0];
+            status.innerText = "Uploading " + file.name + "...";
+            status.style.color = "var(--accent)";
+
+            fetch('/upload?path=' + encodeURIComponent(currentPath), {
+                method: 'POST',
+                headers: { 'X-File-Name': encodeURIComponent(file.name) },
+                body: file
+            }).then(res => {
+                if (res.ok) {
+                    status.innerText = "✅ Upload successful! Refreshing...";
+                    status.style.color = "var(--primary)";
+                    setTimeout(() => window.location.reload(), 1200);
+                } else {
+                    status.innerText = "❌ Upload failed.";
+                    status.style.color = "var(--danger)";
+                }
+            }).catch(err => {
+                status.innerText = "❌ Error: " + err;
+                status.style.color = "var(--danger)";
+            });
+        }
+
+        function deleteItem(itemPath) {
+            if (!confirm("Are you sure you want to delete " + itemPath + "?")) return;
+            
+            fetch('/delete?path=' + encodeURIComponent(itemPath), {
+                method: 'DELETE'
+            }).then(res => {
+                if (res.ok) {
+                    window.location.reload();
+                } else {
+                    alert("❌ Failed to delete item.");
+                }
+            }).catch(err => alert("Error: " + err));
+        }
+    </script>
+</body>
+</html>
