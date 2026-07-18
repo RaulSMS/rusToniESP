@@ -34,7 +34,14 @@
       "type": "wokwi-microsd-card",
       "id": "sd1",
       "top": -150,
-      "left": -50,
+      "left": -150,
+      "attrs": {}
+    },
+    {
+      "type": "board-mfrc522",
+      "id": "rfid1",
+      "top": -170,
+      "left": 200,
       "attrs": {}
     }
   ],
@@ -44,12 +51,21 @@
     [ "esp:2", "led1:A", "red", [ "v0" ] ],
     [ "led1:C", "r1:1", "black", [ "v0" ] ],
     [ "r1:2", "esp:GND.1", "black", [ "v0" ] ],
+    
     [ "esp:GND.2", "sd1:GND", "black", [ "v0" ] ],
     [ "esp:3V3", "sd1:VCC", "red", [ "v0" ] ],
     [ "esp:18", "sd1:SCK", "orange", [ "v0" ] ],
     [ "esp:23", "sd1:DI", "blue", [ "v0" ] ],   
     [ "esp:19", "sd1:DO", "green", [ "v0" ] ],  
-    [ "esp:5", "sd1:CS", "purple", [ "v0" ] ] 
+    [ "esp:5", "sd1:CS", "purple", [ "v0" ] ],
+    
+    [ "rfid1:GND", "esp:GND.2", "black", [ "v0" ] ],
+    [ "rfid1:3.3V", "esp:3V3", "red", [ "v0" ] ],
+    [ "esp:18", "rfid1:SCK", "orange", [ "v0" ] ],
+    [ "esp:23", "rfid1:MOSI", "blue", [ "v0" ] ],
+    [ "esp:19", "rfid1:MISO", "green", [ "v0" ] ],
+    [ "esp:22", "rfid1:SDA", "purple", [ "v0" ] ],
+    [ "esp:21", "rfid1:RST", "white", [ "v0" ] ]
   ],
   "serialMonitor": {
     "display": "terminal",
